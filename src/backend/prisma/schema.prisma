@@ -1,0 +1,55 @@
+generator client {
+  provider   = "prisma-client-js"
+  engineType = "binary"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// PRE-BUILT — do not modify
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  password  String
+  name      String
+  createdAt DateTime @default(now())
+}
+
+// All domain models are added during the workshop by agents
+
+// NEW
+enum OfferStatus {
+  ACTIVE
+  INACTIVE
+}
+
+// NEW
+model Offer {
+  id             Int          @id @default(autoincrement())
+  status         OfferStatus  @default(INACTIVE)
+  startDate      DateTime
+  endDate        DateTime
+  merchantId     String
+  skus           String
+  discountAmount Float
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  redemptions    Redemption[]
+}
+
+// NEW
+model Redemption {
+  id             Int      @id @default(autoincrement())
+  offerId        Int
+  transactionId  String
+  merchantId     String
+  skus           String
+  quantity       Int
+  grossAmount    Float
+  discountAmount Float
+  memberToken    String
+  createdAt      DateTime @default(now())
+  offer          Offer    @relation(fields: [offerId], references: [id])
+}

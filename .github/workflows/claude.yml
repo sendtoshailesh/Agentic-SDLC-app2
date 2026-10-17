@@ -1,0 +1,36 @@
+name: Claude Code Agent
+
+# Claude equivalent of the GitHub Copilot Coding Agent.
+# Trigger by: commenting "@claude ..." on an Issue/PR, or adding the "claude" label to an Issue.
+# Requires repo secret ANTHROPIC_API_KEY (Settings → Secrets and variables → Actions).
+# Claude reads CLAUDE.md (which imports .github/copilot-instructions.md and AGENTS.md).
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  issues:
+    types: [opened, assigned, labeled]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  id-token: write
+
+jobs:
+  claude:
+    if: |
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || github.event.label.name == 'claude'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          label_trigger: claude

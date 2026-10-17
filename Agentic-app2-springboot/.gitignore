@@ -1,0 +1,47 @@
+# Java / Maven
+target/
+*.class
+*.jar
+*.war
+*.ear
+*.db
+hs_err_pid*
+
+# IDE
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node / Angular
+node_modules/
+dist/
+.angular/
+.cache/
+
+# TypeScript
+*.tsbuildinfo
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Test reports
+docs/test-reports/
+test-results/
+playwright-report/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Coverage
+coverage/
+*.lcov
+.nyc_output/

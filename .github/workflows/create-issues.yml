@@ -1,0 +1,129 @@
+name: Create GitHub Issues from Agent Files
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'issues/*.md'
+
+permissions:
+  issues: write
+  contents: read
+  
+
+jobs:
+  create-issues:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Get newly added or modified issue files
+        id: get-files
+        run: |
+          CHANGED=$(git diff --name-status HEAD~1 HEAD | grep '^[AM]' | grep 'issues/.*\.md' | awk '{print $2}')
+          echo "Changed files: $CHANGED"
+          echo "files<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGED" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Ensure labels exist
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh label create "user-story"  --color "#e4e669" --description "Agent-generated user story" --force
+          gh label create "frontend"    --color "#0075ca" --description "Frontend work" --force
+          gh label create "backend"     --color "#e05d44" --description "Backend work" --force
+          gh label create "database"    --color "#6f42c1" --description "Database / schema work" --force
+          gh label create "playwright"  --color "#00b388" --description "E2E Playwright tests" --force
+
+          # Pre-create step labels step-01 through step-30
+          for i in $(seq -w 1 30); do
+            gh label create "step-$i" --color "#f9d0c4" --description "Assignment order step $i" --force
+          done
+
+          # Feature labels are created dynamically per file in the next step
+
+      - name: Create GitHub Issues from markdown files
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          FILES="${{ steps.get-files.outputs.files }}"
+
+          if [ -z "$FILES" ]; then
+            echo "No changed issue files found. Skipping."
+            exit 0
+          fi
+
+          for FILE in $FILES; do
+            echo "========================================"
+            echo "Processing: $FILE"
+
+            TITLE=$(grep '^# ' "$FILE" | head -1 | sed 's/^# //')
+
+            if [ -z "$TITLE" ]; then
+              echo "ERROR: No title found in $FILE"
+              exit 1
+            fi
+
+            echo "Title: [$TITLE]"
+
+            # Exact match duplicate check — paginated
+            EXISTING=$(gh issue list --state open --limit 500 --json title \
+              --jq ".[] | select(.title == \"$TITLE\") | .title" \
+              | head -1)
+
+            echo "Existing match: [$EXISTING]"
+
+            if [ "$EXISTING" = "$TITLE" ]; then
+              echo "Issue already exists: $TITLE - skipping"
+              continue
+            fi
+
+            FILENAME=$(basename "$FILE" .md)
+            case "$FILENAME" in
+              *frontend*|*FRONTEND*)     LABEL="frontend" ;;
+              *backend*|*BACKEND*)       LABEL="backend" ;;
+              *database*|*DATABASE*)     LABEL="database" ;;
+              *playwright*|*PLAYWRIGHT*) LABEL="playwright" ;;
+              *)                         LABEL="user-story" ;;
+            esac
+
+            echo "Label: $LABEL"
+
+            # Extract feature name from filename: strip role prefix (e.g. "database-booking" → "booking")
+            FEATURE=$(echo "$FILENAME" | sed 's/^[a-zA-Z]*-//')
+            if [ -n "$FEATURE" ]; then
+              gh label create "$FEATURE" --color "#bfd4f2" --description "Feature: $FEATURE" --force
+              echo "Feature label: $FEATURE"
+            fi
+
+            # Extract step number from "Step N of M" in Assignment Order section
+            STEP_NUM=$(grep -m1 '^Step [0-9]' "$FILE" | grep -oE '^Step [0-9]+' | grep -oE '[0-9]+' || true)
+            if [ -n "$STEP_NUM" ]; then
+              STEP_LABEL=$(printf "step-%02d" "$STEP_NUM")
+              echo "Step label: $STEP_LABEL"
+              gh issue create \
+                --title "$TITLE" \
+                --body-file "$FILE" \
+                --label "$LABEL" \
+                --label "user-story" \
+                --label "$STEP_LABEL" \
+                --label "$FEATURE" || { echo "WARNING: gh issue create exited non-zero for '$TITLE' — issue may still have been created; continuing."; }
+            else
+              gh issue create \
+                --title "$TITLE" \
+                --body-file "$FILE" \
+                --label "$LABEL" \
+                --label "user-story" \
+                --label "$FEATURE" || { echo "WARNING: gh issue create exited non-zero for '$TITLE' — issue may still have been created; continuing."; }
+            fi
+
+            echo "Processed: $TITLE"
+          done
+
+          echo "========================================"
+          echo "All files processed."
